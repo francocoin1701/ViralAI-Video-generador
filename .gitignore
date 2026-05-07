@@ -1,0 +1,26 @@
+# Entorno virtual
+venv/
+
+# Variables de entorno y credenciales
+.env
+config/credentials.json
+
+# Assets generados (pesados)
+assets/output/
+assets/audio/
+assets/images/
+assets/music/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+logs/
+
+# VSCode
+.vscode/
+
+# Guiones generados (opcional, puedes subirlos si quieres)
+guiones/
