@@ -1,15 +1,16 @@
 # api.py
 import os
+import uuid
 import cloudinary
 import cloudinary.uploader
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 import uvicorn
 
-from src.generator.script_generator import generar_guion, guardar_guion, listar_guiones
+from src.generator.script_generator import generar_guion, listar_guiones
 from src.generator.voice_generator import generar_audio
 from src.editor.video_editor import generar_video
 
@@ -17,13 +18,7 @@ app = FastAPI(title="ViralAI API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-     allow_origins=[
-        "https://app-bhp20zjdwflt.appmedo.com",
-        "https://app-bhlzh2b2ru9t.appmedo.com",
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "*"
-    ],
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,6 +31,9 @@ cloudinary.config(
     secure=True
 )
 
+# Estado en memoria de los jobs
+jobs = {}
+
 class VideoRequest(BaseModel):
     tema: str
     proveedor: str = "gemini"
@@ -43,10 +41,46 @@ class VideoRequest(BaseModel):
     duracion: int = 30
     estilo: str = "educativo"
 
-class StatusResponse(BaseModel):
-    status: str
-    mensaje: str
-    data: Optional[dict] = None
+def procesar_video(job_id: str, tema: str, proveedor: str, api_key: str, duracion: int, estilo: str):
+    try:
+        jobs[job_id]["status"] = "generating_script"
+        jobs[job_id]["mensaje"] = "Generando guión..."
+        guion = generar_guion(tema=tema, duracion=duracion, estilo=estilo, proveedor=proveedor, api_key=api_key)
+
+        jobs[job_id]["status"] = "generating_voice"
+        jobs[job_id]["mensaje"] = "Generando voz..."
+        ruta_audio = generar_audio(guion)
+
+        jobs[job_id]["status"] = "generating_video"
+        jobs[job_id]["mensaje"] = "Generando video..."
+        ruta_video = generar_video(guion)
+
+        jobs[job_id]["status"] = "uploading"
+        jobs[job_id]["mensaje"] = "Subiendo a la nube..."
+        resultado = cloudinary.uploader.upload(
+            ruta_video,
+            resource_type="video",
+            folder="viralai",
+            public_id=os.path.basename(ruta_video).replace(".mp4", ""),
+            overwrite=True
+        )
+        video_url = resultado["secure_url"]
+
+        jobs[job_id]["status"] = "complete"
+        jobs[job_id]["mensaje"] = "Video listo!"
+        jobs[job_id]["resultado"] = {
+            "status": "ok",
+            "tema": tema,
+            "titulo": guion["titulo"],
+            "hashtags": guion["hashtags"],
+            "descripcion_youtube": guion["descripcion_youtube"],
+            "descripcion_tiktok": guion["descripcion_tiktok"],
+            "video_url": video_url
+        }
+
+    except Exception as e:
+        jobs[job_id]["status"] = "error"
+        jobs[job_id]["mensaje"] = str(e)
 
 @app.get("/")
 def root():
@@ -62,95 +96,30 @@ def get_proveedores():
         ]
     }
 
-@app.post("/generar-guion")
-def endpoint_generar_guion(request: VideoRequest):
-    try:
-        guion = generar_guion(
-            tema=request.tema,
-            duracion=request.duracion,
-            estilo=request.estilo,
-            proveedor=request.proveedor,
-            api_key=request.api_key
-        )
-        return {"status": "ok", "guion": guion}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/generar-voz")
-def endpoint_generar_voz(request: VideoRequest):
-    try:
-        from src.generator.script_generator import ya_existe, _nombre_archivo
-        import json
-        if not ya_existe(request.tema):
-            raise HTTPException(status_code=404, detail="Primero genera el guión")
-        with open(_nombre_archivo(request.tema), 'r', encoding='utf-8') as f:
-            guion = json.load(f)
-        ruta_audio = generar_audio(guion)
-        return {"status": "ok", "audio": ruta_audio}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/generar-video")
-def endpoint_generar_video(request: VideoRequest):
-    try:
-        from src.generator.script_generator import ya_existe, _nombre_archivo
-        import json
-        if not ya_existe(request.tema):
-            raise HTTPException(status_code=404, detail="Primero genera el guión")
-        with open(_nombre_archivo(request.tema), 'r', encoding='utf-8') as f:
-            guion = json.load(f)
-        if guion.get("estado") == "sin_voz":
-            raise HTTPException(status_code=400, detail="Primero genera la voz")
-        ruta_video = generar_video(guion)
-        return {"status": "ok", "video": ruta_video}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
 @app.post("/generar-todo")
-def endpoint_generar_todo(request: VideoRequest):
-    try:
-        print(f"📝 Generando guión: {request.tema}")
-        guion = generar_guion(
-            tema=request.tema,
-            duracion=request.duracion,
-            estilo=request.estilo,
-            proveedor=request.proveedor,
-            api_key=request.api_key
-        )
+def endpoint_generar_todo(request: VideoRequest, background_tasks: BackgroundTasks):
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = {
+        "status": "starting",
+        "mensaje": "Iniciando...",
+        "resultado": None
+    }
+    background_tasks.add_task(
+        procesar_video,
+        job_id,
+        request.tema,
+        request.proveedor.lower(),
+        request.api_key,
+        request.duracion,
+        request.estilo
+    )
+    return {"job_id": job_id, "status": "started"}
 
-        print(f"🎙️  Generando voz...")
-        ruta_audio = generar_audio(guion)
-
-        print(f"🎬 Generando video...")
-        ruta_video = generar_video(guion)
-
-        print(f"☁️  Subiendo a Cloudinary...")
-        resultado = cloudinary.uploader.upload(
-            ruta_video,
-            resource_type="video",
-            folder="viralai",
-            public_id=os.path.basename(ruta_video).replace(".mp4", ""),
-            overwrite=True
-        )
-        video_url = resultado["secure_url"]
-        print(f"✅ Video en Cloudinary: {video_url}")
-
-        return {
-            "status": "ok",
-            "tema": request.tema,
-            "titulo": guion["titulo"],
-            "hashtags": guion["hashtags"],
-            "descripcion_youtube": guion["descripcion_youtube"],
-            "descripcion_tiktok": guion["descripcion_tiktok"],
-            "video": ruta_video,
-            "video_url": video_url
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+@app.get("/status/{job_id}")
+def get_status(job_id: str):
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job no encontrado")
+    return jobs[job_id]
 
 @app.get("/video/{nombre}")
 def descargar_video(nombre: str):
@@ -168,7 +137,6 @@ def listar_videos():
             {
                 "tema": g["tema"],
                 "titulo": g["titulo"],
-                "video": g.get("video", ""),
                 "video_url": g.get("video_url", ""),
                 "hashtags": g["hashtags"]
             }
