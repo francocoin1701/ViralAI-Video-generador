@@ -2,18 +2,17 @@
 import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 import uvicorn
 
-from src.generator.script_generator import generar_guion, guardar_guion
+from src.generator.script_generator import generar_guion, guardar_guion, listar_guiones
 from src.generator.voice_generator import generar_audio
 from src.editor.video_editor import generar_video
-from src.generator.script_generator import listar_guiones
 
 app = FastAPI(title="ViralAI API", version="1.0.0")
 
-# CORS para que MeDo pueda conectarse
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,7 +21,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# === MODELOS ===
 class VideoRequest(BaseModel):
     tema: str
     proveedor: str = "gemini"
@@ -35,15 +33,12 @@ class StatusResponse(BaseModel):
     mensaje: str
     data: Optional[dict] = None
 
-# === ENDPOINTS ===
-
 @app.get("/")
 def root():
     return {"mensaje": "ViralAI API funcionando 🚀", "version": "1.0.0"}
 
 @app.get("/proveedores")
 def get_proveedores():
-    """Lista los proveedores de IA disponibles"""
     from config.settings import PROVIDERS_TEXTO
     return {
         "proveedores": [
@@ -54,7 +49,6 @@ def get_proveedores():
 
 @app.post("/generar-guion")
 def endpoint_generar_guion(request: VideoRequest):
-    """Genera el guión del video"""
     try:
         guion = generar_guion(
             tema=request.tema,
@@ -69,7 +63,6 @@ def endpoint_generar_guion(request: VideoRequest):
 
 @app.post("/generar-voz")
 def endpoint_generar_voz(request: VideoRequest):
-    """Genera la voz del guión"""
     try:
         from src.generator.script_generator import ya_existe, _nombre_archivo
         import json
@@ -89,7 +82,6 @@ def endpoint_generar_voz(request: VideoRequest):
 
 @app.post("/generar-video")
 def endpoint_generar_video(request: VideoRequest):
-    """Genera el video completo"""
     try:
         from src.generator.script_generator import ya_existe, _nombre_archivo
         import json
@@ -112,9 +104,7 @@ def endpoint_generar_video(request: VideoRequest):
 
 @app.post("/generar-todo")
 def endpoint_generar_todo(request: VideoRequest):
-    """Genera guión + voz + video en un solo llamado"""
     try:
-        # 1. Guión
         print(f"📝 Generando guión: {request.tema}")
         guion = generar_guion(
             tema=request.tema,
@@ -124,13 +114,13 @@ def endpoint_generar_todo(request: VideoRequest):
             api_key=request.api_key
         )
 
-        # 2. Voz
         print(f"🎙️  Generando voz...")
         ruta_audio = generar_audio(guion)
 
-        # 3. Video
         print(f"🎬 Generando video...")
         ruta_video = generar_video(guion)
+
+        nombre_video = os.path.basename(ruta_video)
 
         return {
             "status": "ok",
@@ -139,14 +129,21 @@ def endpoint_generar_todo(request: VideoRequest):
             "hashtags": guion["hashtags"],
             "descripcion_youtube": guion["descripcion_youtube"],
             "descripcion_tiktok": guion["descripcion_tiktok"],
-            "video": ruta_video
+            "video": ruta_video,
+            "video_url": f"/video/{nombre_video}"
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.get("/video/{nombre}")
+def descargar_video(nombre: str):
+    ruta = os.path.join("assets", "output", nombre)
+    if not os.path.exists(ruta):
+        raise HTTPException(status_code=404, detail="Video no encontrado")
+    return FileResponse(ruta, media_type="video/mp4", filename=nombre)
+
 @app.get("/videos")
 def listar_videos():
-    """Lista todos los videos generados"""
     guiones = listar_guiones(estado="completo")
     return {
         "total": len(guiones),
@@ -155,6 +152,7 @@ def listar_videos():
                 "tema": g["tema"],
                 "titulo": g["titulo"],
                 "video": g.get("video", ""),
+                "video_url": f"/video/{os.path.basename(g.get('video',''))}",
                 "hashtags": g["hashtags"]
             }
             for g in guiones
