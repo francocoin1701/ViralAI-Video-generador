@@ -1,28 +1,25 @@
 # IA y APIs
-anthropic==0.25.0
-openai==1.30.0
-requests==2.31.0
+anthropic
+openai
+google-genai
+requests
 
 # Generación de video
-moviepy==1.0.3
-Pillow==10.3.0
-numpy==1.26.4
+moviepy==2.1.1
+Pillow>=10.4.0
+numpy
 
-# Voz (TTS)
-gTTS==2.5.1
-pydub==0.25.1
+# Voz
+gTTS
 
-# Subtítulos
-imageio==2.34.1
-imageio-ffmpeg==0.4.9
+# Audio
+pydub
 
-# Subida a plataformas
-google-api-python-client==2.130.0
-google-auth-httplib2==0.2.0
-google-auth-oauthlib==1.2.0
-playwright==1.44.0
+# API
+fastapi
+uvicorn
+python-multipart
 
 # Utilidades
-python-dotenv==1.0.1
-colorlog==6.8.2
-tqdm==4.66.4
+python-dotenv
+tqdm
