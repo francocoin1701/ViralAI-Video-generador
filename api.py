@@ -1,5 +1,7 @@
 # api.py
 import os
+import cloudinary
+import cloudinary.uploader
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -19,6 +21,13 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True
 )
 
 class VideoRequest(BaseModel):
@@ -66,13 +75,10 @@ def endpoint_generar_voz(request: VideoRequest):
     try:
         from src.generator.script_generator import ya_existe, _nombre_archivo
         import json
-
         if not ya_existe(request.tema):
             raise HTTPException(status_code=404, detail="Primero genera el guión")
-
         with open(_nombre_archivo(request.tema), 'r', encoding='utf-8') as f:
             guion = json.load(f)
-
         ruta_audio = generar_audio(guion)
         return {"status": "ok", "audio": ruta_audio}
     except HTTPException:
@@ -85,16 +91,12 @@ def endpoint_generar_video(request: VideoRequest):
     try:
         from src.generator.script_generator import ya_existe, _nombre_archivo
         import json
-
         if not ya_existe(request.tema):
             raise HTTPException(status_code=404, detail="Primero genera el guión")
-
         with open(_nombre_archivo(request.tema), 'r', encoding='utf-8') as f:
             guion = json.load(f)
-
         if guion.get("estado") == "sin_voz":
             raise HTTPException(status_code=400, detail="Primero genera la voz")
-
         ruta_video = generar_video(guion)
         return {"status": "ok", "video": ruta_video}
     except HTTPException:
@@ -120,7 +122,16 @@ def endpoint_generar_todo(request: VideoRequest):
         print(f"🎬 Generando video...")
         ruta_video = generar_video(guion)
 
-        nombre_video = os.path.basename(ruta_video)
+        print(f"☁️  Subiendo a Cloudinary...")
+        resultado = cloudinary.uploader.upload(
+            ruta_video,
+            resource_type="video",
+            folder="viralai",
+            public_id=os.path.basename(ruta_video).replace(".mp4", ""),
+            overwrite=True
+        )
+        video_url = resultado["secure_url"]
+        print(f"✅ Video en Cloudinary: {video_url}")
 
         return {
             "status": "ok",
@@ -130,7 +141,7 @@ def endpoint_generar_todo(request: VideoRequest):
             "descripcion_youtube": guion["descripcion_youtube"],
             "descripcion_tiktok": guion["descripcion_tiktok"],
             "video": ruta_video,
-            "video_url": f"/video/{nombre_video}"
+            "video_url": video_url
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -152,7 +163,7 @@ def listar_videos():
                 "tema": g["tema"],
                 "titulo": g["titulo"],
                 "video": g.get("video", ""),
-                "video_url": f"/video/{os.path.basename(g.get('video',''))}",
+                "video_url": g.get("video_url", ""),
                 "hashtags": g["hashtags"]
             }
             for g in guiones
