@@ -134,10 +134,13 @@ def generar_video(guion: dict) -> str:
 
     video.write_videofile(
         ruta_video,
-        fps=30,
+        fps=24,
         codec="libx264",
         audio_codec="aac",
-        logger=None
+        preset="ultrafast",
+        threads=1,
+        logger=None,
+        bitrate="500k"
     )
 
     guion["video"] = ruta_video
