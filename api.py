@@ -17,7 +17,13 @@ app = FastAPI(title="ViralAI API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+     allow_origins=[
+        "https://app-bhp20zjdwflt.appmedo.com",
+        "https://app-bhlzh2b2ru9t.appmedo.com",
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "*"
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
