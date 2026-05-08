@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ViralAI — Generate. Post. Go Viral.</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --green:#00FF41;--cyan:#00FFFF;--red:#FF003C;--bg:#0D0D0D;--bg2:#0a0a0a;
+  --dim:#003B00;--border:#00FF4133;--text:#00FF41;
+}
+body{background:var(--bg);color:var(--green);font-family:'Share Tech Mono',monospace;min-height:100vh;overflow-x:hidden;cursor:crosshair}
+
+/* MATRIX RAIN */
+#matrix{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;opacity:0.18;pointer-events:none}
+
+/* SCANLINES */
+body::after{content:'';position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.15) 2px,rgba(0,0,0,0.15) 4px);z-index:1;pointer-events:none}
+
+.container{position:relative;z-index:2;max-width:680px;margin:0 auto;padding:2rem 1rem}
+
+/* HEADER */
+.header{text-align:center;margin-bottom:3rem}
+.logo{font-family:'VT323',monospace;font-size:clamp(3rem,10vw,6rem);color:var(--green);letter-spacing:0.1em;animation:glitch 3s infinite;text-shadow:0 0 20px var(--green)}
+.tagline{font-size:clamp(0.7rem,2vw,0.9rem);color:var(--cyan);letter-spacing:0.3em;margin-top:0.5rem;opacity:0.8}
+.blink{animation:blink 1s step-end infinite}
+
+/* GLITCH */
+@keyframes glitch{
+  0%,90%,100%{text-shadow:0 0 20px var(--green);transform:translate(0)}
+  91%{text-shadow:-2px 0 var(--cyan),2px 0 var(--red);transform:translate(-1px,1px)}
+  93%{text-shadow:2px 0 var(--cyan),-2px 0 var(--red);transform:translate(1px,-1px)}
+  95%{text-shadow:-2px 0 var(--green);transform:translate(-1px)}
+  97%{text-shadow:2px 0 var(--red);transform:translate(1px)}
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes scanin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{box-shadow:0 0 8px var(--red)}50%{box-shadow:0 0 25px var(--red),0 0 50px var(--red)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes fadeup{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* TERMINAL CARD */
+.card{background:rgba(0,20,0,0.85);border:1px solid var(--border);padding:1.5rem;margin-bottom:1.5rem;position:relative;animation:scanin 0.4s ease}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--green),transparent)}
+.card-title{font-family:'VT323',monospace;font-size:1.2rem;color:var(--cyan);margin-bottom:1rem;letter-spacing:0.2em}
+.card-title::before{content:'> ';color:var(--green)}
+
+/* PROVIDER GRID */
+.provider-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.5rem;margin-bottom:1rem}
+.provider-btn{background:transparent;border:1px solid var(--dim);color:#006600;font-family:'Share Tech Mono',monospace;font-size:0.75rem;padding:0.6rem 0.5rem;cursor:pointer;transition:all 0.2s;text-align:center;letter-spacing:0.05em}
+.provider-btn:hover{border-color:var(--green);color:var(--green);background:rgba(0,255,65,0.05)}
+.provider-btn.active{border-color:var(--cyan);color:var(--cyan);background:rgba(0,255,255,0.08);box-shadow:0 0 10px rgba(0,255,255,0.2)}
+.provider-btn .badge{display:block;font-size:0.6rem;margin-top:3px;color:#004400}
+.provider-btn.active .badge{color:#008888}
+
+/* INPUTS */
+.input-group{margin-bottom:1rem}
+.input-label{font-size:0.75rem;color:#008800;margin-bottom:0.4rem;letter-spacing:0.15em;display:block}
+.input-label::before{content:'$ '}
+input,textarea,select{width:100%;background:rgba(0,10,0,0.9);border:1px solid var(--dim);color:var(--green);font-family:'Share Tech Mono',monospace;font-size:0.9rem;padding:0.7rem 1rem;outline:none;transition:border-color 0.2s;-webkit-appearance:none}
+input:focus,textarea:focus,select:focus{border-color:var(--green);box-shadow:0 0 8px rgba(0,255,65,0.2)}
+input::placeholder{color:#003300}
+select option{background:#0D0D0D;color:var(--green)}
+
+/* GENERATE BTN */
+.btn-generate{width:100%;background:transparent;border:2px solid var(--red);color:var(--red);font-family:'VT323',monospace;font-size:1.8rem;padding:0.8rem;cursor:pointer;letter-spacing:0.3em;animation:pulse 2s infinite;transition:all 0.2s;margin-top:0.5rem}
+.btn-generate:hover{background:rgba(255,0,60,0.1);letter-spacing:0.5em}
+.btn-generate:disabled{opacity:0.4;animation:none;cursor:not-allowed}
+
+/* PROGRESS */
+.progress{display:none}
+.progress.active{display:block}
+.terminal-line{font-size:0.85rem;margin:0.3rem 0;opacity:0;animation:scanin 0.3s ease forwards}
+.terminal-line.done{color:var(--cyan)}
+.terminal-line.active-line{color:var(--green)}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--dim);border-top-color:var(--green);border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-left:8px}
+
+/* RESULTS */
+.results{display:none;animation:fadeup 0.6s ease}
+.results.active{display:block}
+.result-title{font-family:'VT323',monospace;font-size:2rem;color:var(--cyan);margin-bottom:1rem;line-height:1.2}
+.hashtags{display:flex;flex-wrap:wrap;gap:0.4rem;margin:1rem 0}
+.hashtag{background:rgba(0,255,65,0.08);border:1px solid var(--dim);color:#00AA30;font-size:0.7rem;padding:0.2rem 0.5rem;letter-spacing:0.05em}
+.desc-box{background:rgba(0,0,0,0.5);border-left:2px solid var(--green);padding:0.8rem 1rem;margin:0.8rem 0;font-size:0.8rem;color:#00BB40;line-height:1.6}
+.platform-label{font-size:0.65rem;color:#006600;letter-spacing:0.2em;margin-bottom:0.3rem}
+
+/* DOWNLOAD BTN */
+.btn-download{display:block;width:100%;background:rgba(0,255,65,0.08);border:1px solid var(--green);color:var(--green);font-family:'Share Tech Mono',monospace;font-size:0.9rem;padding:0.8rem;cursor:pointer;text-align:center;letter-spacing:0.15em;margin-top:1rem;transition:all 0.2s;text-decoration:none}
+.btn-download:hover{background:rgba(0,255,65,0.15);box-shadow:0 0 15px rgba(0,255,65,0.2)}
+
+/* ERROR */
+.error-msg{display:none;background:rgba(255,0,60,0.1);border:1px solid var(--red);color:var(--red);padding:0.8rem 1rem;font-size:0.8rem;margin-top:1rem;line-height:1.6}
+.error-msg.active{display:block}
+
+/* NEW VIDEO BTN */
+.btn-new{background:transparent;border:1px solid var(--dim);color:#006600;font-family:'Share Tech Mono',monospace;font-size:0.8rem;padding:0.5rem 1rem;cursor:pointer;margin-top:0.8rem;width:100%;letter-spacing:0.1em;transition:all 0.2s}
+.btn-new:hover{border-color:var(--cyan);color:var(--cyan)}
+
+/* STATUS BAR */
+.statusbar{position:fixed;bottom:0;left:0;right:0;background:rgba(0,20,0,0.95);border-top:1px solid var(--dim);padding:0.3rem 1rem;font-size:0.65rem;color:#005500;z-index:10;display:flex;justify-content:space-between;letter-spacing:0.1em}
+
+@media(max-width:480px){
+  .provider-grid{grid-template-columns:repeat(3,1fr)}
+  .logo{font-size:3.5rem}
+}
+</style>
+</head>
+<body>
+<canvas id="matrix"></canvas>
+
+<div class="container">
+  <div class="header">
+    <div class="logo">VIRAL<span style="color:var(--cyan)">AI</span></div>
+    <div class="tagline">GENERATE<span class="blink">_</span> POST<span class="blink" style="animation-delay:0.3s">_</span> GO VIRAL</div>
+  </div>
+
+  <div class="card" id="form-section">
+    <div class="card-title">SELECT AI PROVIDER</div>
+    <div class="provider-grid" id="providers"></div>
+
+    <div class="input-group" id="key-group">
+      <label class="input-label" for="api-key">API_KEY</label>
+      <input type="password" id="api-key" placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx">
+    </div>
+
+    <div class="input-group">
+      <label class="input-label" for="tema">VIDEO_TOPIC</label>
+      <input type="text" id="tema" placeholder="ej: curiosidades del universo..." maxlength="100">
+    </div>
+
+    <div class="input-group">
+      <label class="input-label" for="estilo">CONTENT_STYLE</label>
+      <select id="estilo">
+        <option value="educativo">EDUCATIVO</option>
+        <option value="entretenimiento">ENTRETENIMIENTO</option>
+        <option value="motivacional">MOTIVACIONAL</option>
+        <option value="humor">HUMOR</option>
+      </select>
+    </div>
+
+    <button class="btn-generate" id="btn-gen" onclick="generarVideo()">[ GENERAR VIDEO ]</button>
+    <div class="error-msg" id="error-msg"></div>
+  </div>
+
+  <div class="card progress" id="progress-section">
+    <div class="card-title">PROCESSING</div>
+    <div id="terminal-output"></div>
+  </div>
+
+  <div class="results" id="results-section">
+    <div class="card">
+      <div class="card-title">VIDEO GENERATED</div>
+      <div class="result-title" id="res-title"></div>
+      <div class="hashtags" id="res-hashtags"></div>
+      <div class="platform-label">▶ YOUTUBE DESCRIPTION</div>
+      <div class="desc-box" id="res-yt"></div>
+      <div class="platform-label">▶ TIKTOK DESCRIPTION</div>
+      <div class="desc-box" id="res-tt"></div>
+      <a class="btn-download" id="btn-download" href="#" download>⬇ DOWNLOAD VIDEO</a>
+      <button class="btn-new" onclick="resetUI()">↩ GENERATE NEW VIDEO</button>
+    </div>
+  </div>
+</div>
+
+<div class="statusbar">
+  <span id="status-left">VIRALAI v1.0 // READY</span>
+  <span id="status-right">API: <span id="api-status" style="color:var(--cyan)">ONLINE</span></span>
+</div>
+
+<script>
+const API = 'https://viralai.onrender.com';
+
+const PROVIDERS = [
+  {id:'gemini',  name:'GEMINI',   note:'FREE TIER'},
+  {id:'claude',  name:'CLAUDE',   note:'ANTHROPIC'},
+  {id:'openai',  name:'CHATGPT',  note:'OPENAI'},
+  {id:'deepseek',name:'DEEPSEEK', note:'CHINESE 🐉'},
+  {id:'qwen',    name:'QWEN',     note:'ALIBABA'},
+];
+
+let selected = 'gemini';
+
+function initProviders(){
+  const g = document.getElementById('providers');
+  PROVIDERS.forEach(p=>{
+    const b = document.createElement('button');
+    b.className = 'provider-btn' + (p.id===selected?' active':'');
+    b.innerHTML = p.name + '<span class="badge">'+p.note+'</span>';
+    b.onclick = ()=>selectProvider(p.id);
+    b.id = 'btn-'+p.id;
+    g.appendChild(b);
+  });
+}
+
+function selectProvider(id){
+  selected = id;
+  document.querySelectorAll('.provider-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-'+id).classList.add('active');
+  document.getElementById('status-left').textContent = 'PROVIDER: '+id.toUpperCase()+' // READY';
+}
+
+function addLine(text, type='active-line'){
+  const t = document.getElementById('terminal-output');
+  const d = document.createElement('div');
+  d.className = 'terminal-line ' + type;
+  d.style.animationDelay = '0s';
+  d.innerHTML = text;
+  t.appendChild(d);
+  t.scrollTop = t.scrollHeight;
+}
+
+function clearLines(){
+  document.getElementById('terminal-output').innerHTML='';
+}
+
+async function generarVideo(){
+  const apiKey = document.getElementById('api-key').value.trim();
+  const tema = document.getElementById('tema').value.trim();
+  const estilo = document.getElementById('estilo').value;
+
+  if(!tema){showError('ERROR: VIDEO_TOPIC required');return;}
+  if(!apiKey){showError('ERROR: API_KEY required — this engine runs on YOUR tokens, not ours 💸');return;}
+
+  hideError();
+  document.getElementById('btn-gen').disabled = true;
+  document.getElementById('form-section').style.display='none';
+  
+  const prog = document.getElementById('progress-section');
+  prog.classList.add('active');
+  clearLines();
+
+  const steps = [
+    '> INITIALIZING AI ENGINE...',
+    '> CONNECTING TO '+selected.toUpperCase()+' API...',
+    '> GENERATING SCRIPT WITH AI<span class="spinner"></span>',
+    '> GENERATING VOICE NARRATION<span class="spinner"></span>',
+    '> DOWNLOADING AI IMAGES<span class="spinner"></span>',
+    '> ASSEMBLING VIDEO<span class="spinner"></span>',
+    '> ADDING SUBTITLES...',
+    '> EXPORTING MP4...',
+  ];
+
+  for(let i=0;i<steps.length-1;i++){
+    addLine(steps[i]);
+    await sleep(800);
+  }
+
+  try{
+    document.getElementById('status-left').textContent='GENERATING: '+tema.toUpperCase();
+    
+    const res = await fetch(API+'/generar-todo',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({tema,proveedor:selected,api_key:apiKey,duracion:30,estilo})
+    });
+
+    const data = await res.json();
+
+    if(!res.ok){
+      throw new Error(data.detail || 'API Error '+res.status);
+    }
+
+    addLine('> EXPORT COMPLETE ✓','terminal-line done');
+    addLine('> STATUS: SUCCESS ✓','terminal-line done');
+    await sleep(600);
+
+    showResults(data);
+
+  }catch(err){
+    prog.classList.remove('active');
+    document.getElementById('form-section').style.display='block';
+    document.getElementById('btn-gen').disabled=false;
+    showError('ERROR: '+err.message);
+  }
+}
+
+function showResults(data){
+  document.getElementById('progress-section').classList.remove('active');
+  
+  document.getElementById('res-title').textContent = data.titulo || 'Video Generated';
+  
+  const hDiv = document.getElementById('res-hashtags');
+  hDiv.innerHTML='';
+  (data.hashtags||[]).forEach(h=>{
+    const s=document.createElement('span');
+    s.className='hashtag';s.textContent=h;hDiv.appendChild(s);
+  });
+  
+  document.getElementById('res-yt').textContent = data.descripcion_youtube||'';
+  document.getElementById('res-tt').textContent = data.descripcion_tiktok||'';
+  
+  if(data.video){
+    const btn = document.getElementById('btn-download');
+    btn.href = API+'/video/'+encodeURIComponent(data.video.split('/').pop());
+    btn.style.display='block';
+  }
+  
+  document.getElementById('results-section').classList.add('active');
+  document.getElementById('status-left').textContent='STATUS: VIDEO READY ✓';
+}
+
+function resetUI(){
+  document.getElementById('results-section').classList.remove('active');
+  document.getElementById('form-section').style.display='block';
+  document.getElementById('btn-gen').disabled=false;
+  document.getElementById('tema').value='';
+  document.getElementById('status-left').textContent='VIRALAI v1.0 // READY';
+}
+
+function showError(msg){
+  const e=document.getElementById('error-msg');
+  e.textContent=msg;e.classList.add('active');
+}
+function hideError(){
+  document.getElementById('error-msg').classList.remove('active');
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+// MATRIX RAIN
+const canvas=document.getElementById('matrix');
+const ctx=canvas.getContext('2d');
+function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
+resizeCanvas();
+window.addEventListener('resize',resizeCanvas);
+
+const chars='アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<>{}[]|\\/*&^%$#@!';
+const fontSize=14;
+let cols=Math.floor(canvas.width/fontSize);
+let drops=Array(cols).fill(1);
+
+function drawMatrix(){
+  ctx.fillStyle='rgba(13,13,13,0.05)';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#00FF41';
+  ctx.font=fontSize+'px Share Tech Mono';
+  drops.forEach((y,i)=>{
+    const c=chars[Math.floor(Math.random()*chars.length)];
+    ctx.fillStyle=Math.random()>0.95?'#00FFFF':'#00FF41';
+    ctx.fillText(c,i*fontSize,y*fontSize);
+    if(y*fontSize>canvas.height&&Math.random()>0.975)drops[i]=0;
+    drops[i]++;
+  });
+}
+setInterval(drawMatrix,50);
+
+// CHECK API
+fetch(API+'/').then(r=>{
+  if(r.ok){document.getElementById('api-status').textContent='ONLINE';document.getElementById('api-status').style.color='var(--cyan)';}
+}).catch(()=>{
+  document.getElementById('api-status').textContent='OFFLINE';
+  document.getElementById('api-status').style.color='var(--red)';
+});
+
+initProviders();
+</script>
+</body>
+</html>
