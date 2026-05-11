@@ -45,6 +45,7 @@ def procesar_video(job_id: str, tema: str, proveedor: str, api_key: str, duracio
     try:
         jobs[job_id]["status"] = "generating_script"
         jobs[job_id]["mensaje"] = "Generando guión..."
+        
         guion = generar_guion(tema=tema, duracion=duracion, estilo=estilo, proveedor=proveedor, api_key=api_key)
 
         jobs[job_id]["status"] = "generating_voice"
@@ -57,6 +58,8 @@ def procesar_video(job_id: str, tema: str, proveedor: str, api_key: str, duracio
 
         jobs[job_id]["status"] = "uploading"
         jobs[job_id]["mensaje"] = "Subiendo a la nube..."
+        print(f"☁️ Iniciando subida a Cloudinary: {ruta_video}")
+        print(f"☁️ Cloud name: {os.getenv('CLOUDINARY_CLOUD_NAME')}")
         resultado = cloudinary.uploader.upload(
             ruta_video,
             resource_type="video",
@@ -64,6 +67,7 @@ def procesar_video(job_id: str, tema: str, proveedor: str, api_key: str, duracio
             public_id=os.path.basename(ruta_video).replace(".mp4", ""),
             overwrite=True
         )
+        print(f"☁️ Cloudinary response: {resultado.get('secure_url', 'NO URL')}")
         video_url = resultado["secure_url"]
 
         jobs[job_id]["status"] = "complete"
