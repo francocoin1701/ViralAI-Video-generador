@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from typing import Optional
 import uvicorn
 
-from src.generator.script_generator import generar_guion, listar_guiones
+from src.generator.script_generator import generar_guion, guardar_guion, listar_guiones
 from src.generator.voice_generator import generar_audio
 from src.editor.video_editor import generar_video
 
@@ -31,7 +31,6 @@ cloudinary.config(
     secure=True
 )
 
-# Estado en memoria de los jobs
 jobs = {}
 
 class VideoRequest(BaseModel):
@@ -40,13 +39,21 @@ class VideoRequest(BaseModel):
     api_key: str
     duracion: int = 30
     estilo: str = "educativo"
+    wallet: str = ""
 
-def procesar_video(job_id: str, tema: str, proveedor: str, api_key: str, duracion: int, estilo: str):
+def procesar_video(job_id: str, tema: str, proveedor: str, api_key: str, duracion: int, estilo: str, wallet: str = ""):
     try:
         jobs[job_id]["status"] = "generating_script"
         jobs[job_id]["mensaje"] = "Generando guión..."
-        
-        guion = generar_guion(tema=tema, duracion=duracion, estilo=estilo, proveedor=proveedor, api_key=api_key)
+        guion = generar_guion(
+            tema=tema,
+            duracion=duracion,
+            estilo=estilo,
+            proveedor=proveedor,
+            api_key=api_key
+        )
+        guion["wallet"] = wallet
+        guardar_guion(guion)
 
         jobs[job_id]["status"] = "generating_voice"
         jobs[job_id]["mensaje"] = "Generando voz..."
@@ -60,6 +67,7 @@ def procesar_video(job_id: str, tema: str, proveedor: str, api_key: str, duracio
         jobs[job_id]["mensaje"] = "Subiendo a la nube..."
         print(f"☁️ Iniciando subida a Cloudinary: {ruta_video}")
         print(f"☁️ Cloud name: {os.getenv('CLOUDINARY_CLOUD_NAME')}")
+
         resultado = cloudinary.uploader.upload(
             ruta_video,
             resource_type="video",
@@ -67,8 +75,12 @@ def procesar_video(job_id: str, tema: str, proveedor: str, api_key: str, duracio
             public_id=os.path.basename(ruta_video).replace(".mp4", ""),
             overwrite=True
         )
-        print(f"☁️ Cloudinary response: {resultado.get('secure_url', 'NO URL')}")
         video_url = resultado["secure_url"]
+        print(f"☁️ Cloudinary URL: {video_url}")
+
+        guion["video_url"] = video_url
+        guion["estado"] = "completo"
+        guardar_guion(guion)
 
         jobs[job_id]["status"] = "complete"
         jobs[job_id]["mensaje"] = "Video listo!"
@@ -83,6 +95,7 @@ def procesar_video(job_id: str, tema: str, proveedor: str, api_key: str, duracio
         }
 
     except Exception as e:
+        print(f"❌ Error en job {job_id}: {str(e)}")
         jobs[job_id]["status"] = "error"
         jobs[job_id]["mensaje"] = str(e)
 
@@ -115,7 +128,8 @@ def endpoint_generar_todo(request: VideoRequest, background_tasks: BackgroundTas
         request.proveedor.lower(),
         request.api_key,
         request.duracion,
-        request.estilo
+        request.estilo,
+        request.wallet
     )
     return {"job_id": job_id, "status": "started"}
 
@@ -124,6 +138,23 @@ def get_status(job_id: str):
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job no encontrado")
     return jobs[job_id]
+
+@app.get("/mis-videos/{wallet}")
+def mis_videos(wallet: str):
+    guiones = listar_guiones()
+    videos = [
+        {
+            "tema": g["tema"],
+            "titulo": g["titulo"],
+            "video_url": g.get("video_url", ""),
+            "hashtags": g.get("hashtags", [])
+        }
+        for g in guiones
+        if g.get("wallet", "").lower() == wallet.lower()
+        and g.get("estado") == "completo"
+        and g.get("video_url")
+    ]
+    return {"wallet": wallet, "total": len(videos), "videos": videos}
 
 @app.get("/video/{nombre}")
 def descargar_video(nombre: str):
@@ -142,7 +173,7 @@ def listar_videos():
                 "tema": g["tema"],
                 "titulo": g["titulo"],
                 "video_url": g.get("video_url", ""),
-                "hashtags": g["hashtags"]
+                "hashtags": g.get("hashtags", [])
             }
             for g in guiones
         ]
