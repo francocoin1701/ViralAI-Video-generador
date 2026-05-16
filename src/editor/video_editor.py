@@ -12,13 +12,12 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 def descargar_imagen(prompt: str, numero: int, tema: str) -> str:
     nombre = tema.lower().replace(" ", "_")
     nombre = ''.join(c for c in nombre if c.isalnum() or c == '_')
-    ruta = os.path.join(IMAGES_DIR, f"{nombre}_escena_{numero}.png")
+    ruta_img = os.path.join(IMAGES_DIR, f"{nombre}_escena_{numero}.png")
 
-    if os.path.exists(ruta):
+    if os.path.exists(ruta_img):
         print(f"  📁 Imagen {numero} ya existe, reutilizando...")
-        return ruta
+        return ruta_img
 
-    # Prompt más corto = más rápido en Pollinations
     prompt_corto = prompt[:200]
     url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(prompt_corto)}?width={VIDEO_WIDTH}&height={VIDEO_HEIGHT}&nologo=true&seed={numero}"
 
@@ -28,10 +27,10 @@ def descargar_imagen(prompt: str, numero: int, tema: str) -> str:
         try:
             respuesta = requests.get(url, timeout=45)
             if respuesta.status_code == 200:
-                with open(ruta, 'wb') as f:
+                with open(ruta_img, 'wb') as f:
                     f.write(respuesta.content)
                 print(f"  ✅ Imagen {numero} guardada")
-                return ruta
+                return ruta_img
         except Exception:
             print(f"  ⚠️  Intento {intento+1}/3 imagen {numero}, reintentando...")
             time.sleep(3)
@@ -42,12 +41,12 @@ def descargar_imagen(prompt: str, numero: int, tema: str) -> str:
 def crear_imagen_fallback(texto: str, numero: int, tema: str) -> str:
     nombre = tema.lower().replace(" ", "_")
     nombre = ''.join(c for c in nombre if c.isalnum() or c == '_')
-    ruta = os.path.join(IMAGES_DIR, f"{nombre}_escena_{numero}.png")
+    ruta_img = os.path.join(IMAGES_DIR, f"{nombre}_escena_{numero}.png")
     img = Image.new('RGB', (VIDEO_WIDTH, VIDEO_HEIGHT), color=(10, 10, 30))
     draw = ImageDraw.Draw(img)
     draw.text((VIDEO_WIDTH//2, VIDEO_HEIGHT//2), texto[:50], fill=(0, 255, 65), anchor="mm")
-    img.save(ruta)
-    return ruta
+    img.save(ruta_img)
+    return ruta_img
 
 def agregar_subtitulo(ruta_imagen: str, texto: str, ruta_salida: str) -> str:
     img = Image.open(ruta_imagen).convert("RGB")
@@ -85,7 +84,7 @@ def agregar_subtitulo(ruta_imagen: str, texto: str, ruta_salida: str) -> str:
                   stroke_width=2, stroke_fill="black")
         y += 55
 
-    img.save(ruta)
+    img.save(ruta_salida)
     return ruta_salida
 
 def generar_video(guion: dict) -> str:
@@ -101,7 +100,6 @@ def generar_video(guion: dict) -> str:
         print("❌ No se encontró el audio.")
         return None
 
-    # Limitar a máximo 5 escenas
     escenas = guion["escenas"][:5]
     num_escenas = len(escenas)
 
@@ -112,7 +110,6 @@ def generar_video(guion: dict) -> str:
 
     print(f"  ⏱️  Audio: {duracion_total:.1f}s — {num_escenas} escenas — {duracion_por_escena:.1f}s por escena")
 
-    # Descargar imágenes EN PARALELO
     print("\n📸 Descargando imágenes en paralelo...")
     rutas_imagenes = {}
 
@@ -129,13 +126,11 @@ def generar_video(guion: dict) -> str:
         for futuro in as_completed(futuros):
             num = futuros[futuro]
             try:
-                ruta_img = futuro.result()
-                rutas_imagenes[num] = ruta_img
+                rutas_imagenes[num] = futuro.result()
             except Exception as e:
                 print(f"  ❌ Error imagen {num}: {e}")
                 rutas_imagenes[num] = crear_imagen_fallback("Error", num, tema)
 
-    # Agregar subtítulos y crear clips
     print("\n🎨 Agregando subtítulos...")
     clips = []
     for escena in escenas:
@@ -143,8 +138,10 @@ def generar_video(guion: dict) -> str:
         texto = escena["texto_narrado"]
         ruta_img = rutas_imagenes.get(num)
 
-        nombre_sub = nombre + f"_sub_{num}.png"
-        ruta_sub = os.path.join(IMAGES_DIR, nombre_sub)
+        if not ruta_img or not os.path.exists(ruta_img):
+            ruta_img = crear_imagen_fallback(texto[:50], num, tema)
+
+        ruta_sub = os.path.join(IMAGES_DIR, f"{nombre}_sub_{num}.png")
         agregar_subtitulo(ruta_img, texto, ruta_sub)
 
         clip = ImageClip(ruta_sub).with_duration(duracion_por_escena)
