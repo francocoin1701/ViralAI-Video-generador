@@ -20,25 +20,27 @@ def guardar_guion(guion: dict):
 
 def listar_guiones(estado: str = None) -> list:
     guiones = []
+    if not os.path.exists(GUIONES_DIR):
+        return guiones
     for archivo in os.listdir(GUIONES_DIR):
         if archivo.endswith('.json'):
             ruta = os.path.join(GUIONES_DIR, archivo)
-            with open(ruta, 'r', encoding='utf-8') as f:
-                g = json.load(f)
-            if estado is None or g.get("estado") == estado:
-                guiones.append(g)
+            try:
+                with open(ruta, 'r', encoding='utf-8') as f:
+                    g = json.load(f)
+                if estado is None or g.get("estado") == estado:
+                    guiones.append(g)
+            except:
+                pass
     return guiones
 
 def _get_client(proveedor: str, api_key: str):
-    """Retorna el cliente correcto según el proveedor"""
     if proveedor == "gemini":
         from google import genai
         return genai.Client(api_key=api_key)
-    
     elif proveedor == "claude":
         import anthropic
         return anthropic.Anthropic(api_key=api_key)
-    
     elif proveedor in ["openai", "deepseek", "qwen"]:
         from openai import OpenAI
         config = PROVIDERS_TEXTO[proveedor]
@@ -46,11 +48,9 @@ def _get_client(proveedor: str, api_key: str):
         if "base_url" in config:
             kwargs["base_url"] = config["base_url"]
         return OpenAI(**kwargs)
-    
     raise ValueError(f"Proveedor no soportado: {proveedor}")
 
 def _llamar_api(proveedor: str, api_key: str, prompt: str) -> str:
-    """Llama a la API correcta y retorna el texto"""
     config = PROVIDERS_TEXTO[proveedor]
     modelo = config["modelo"]
     client = _get_client(proveedor, api_key)
@@ -58,7 +58,6 @@ def _llamar_api(proveedor: str, api_key: str, prompt: str) -> str:
     if proveedor == "gemini":
         respuesta = client.models.generate_content(model=modelo, contents=prompt)
         return respuesta.text
-
     elif proveedor == "claude":
         respuesta = client.messages.create(
             model=modelo,
@@ -66,7 +65,6 @@ def _llamar_api(proveedor: str, api_key: str, prompt: str) -> str:
             messages=[{"role": "user", "content": prompt}]
         )
         return respuesta.content[0].text
-
     elif proveedor in ["openai", "deepseek", "qwen"]:
         respuesta = client.chat.completions.create(
             model=modelo,
@@ -96,7 +94,7 @@ def generar_guion(tema: str, duracion: int = 30, estilo: str = "educativo",
         api_key = keys.get(proveedor, "")
 
     if not api_key:
-        raise ValueError(f"No hay API key para {proveedor}. Configúrala en .env o pásala como parámetro.")
+        raise ValueError(f"No hay API key para {proveedor}.")
 
     prompt = f"""Eres un experto creador de contenido viral para TikTok y YouTube Shorts.
 
@@ -119,7 +117,7 @@ Responde ÚNICAMENTE en este formato JSON exacto, sin explicaciones ni texto adi
       "duracion_segundos": 5,
       "texto_narrado": "Lo que se dice en esta escena",
       "descripcion_visual": "Lo que se ve en pantalla",
-      "prompt_imagen": "Prompt en inglés para generar imagen con IA, muy detallado y visual"
+      "prompt_imagen": "Prompt en inglés para generar imagen con IA, muy detallado y visual, maximum 100 words"
     }}
   ],
   "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],
@@ -127,7 +125,7 @@ Responde ÚNICAMENTE en este formato JSON exacto, sin explicaciones ni texto adi
   "descripcion_tiktok": "Descripción corta para TikTok con emojis"
 }}
 
-El guión debe ser dinámico, entretenido y optimizado para retención. Máximo {duracion // 3} escenas."""
+IMPORTANTE: Máximo 5 escenas. Los prompts de imagen deben ser cortos (máximo 100 palabras en inglés)."""
 
     texto = _llamar_api(proveedor, api_key, prompt)
     texto = texto.strip()
