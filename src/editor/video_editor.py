@@ -129,8 +129,8 @@ def generar_video(guion: dict) -> str:
         for futuro in as_completed(futuros):
             num = futuros[futuro]
             try:
-                ruta = futuro.result()
-                rutas_imagenes[num] = ruta
+                ruta_img = futuro.result()
+                rutas_imagenes[num] = ruta_img
             except Exception as e:
                 print(f"  ❌ Error imagen {num}: {e}")
                 rutas_imagenes[num] = crear_imagen_fallback("Error", num, tema)
